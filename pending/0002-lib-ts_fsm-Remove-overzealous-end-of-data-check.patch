@@ -1,7 +1,7 @@
 From c413cbc70785efff20b86b3bbc68b85a10c42e7d Mon Sep 17 00:00:00 2001
 From: Josh Law <joshlaw48@gmail.com>
 Date: Sat, 11 Apr 2026 20:22:16 +0000
-Subject: [PATCH 2/2] lib/ts_fsm: Remove overzealous end-of-data check
+Subject: [PATCH 2/2] lib/ts_fsm: Remove eager end-of-data check
 
 The FSM text search was incorrectly dropping valid matches if they were
 followed by trailing data in the search window. This was due to an
