@@ -1,0 +1,93 @@
+From a8abff572e03d2d9e3d58421d377d56c5d32e6f4 Mon Sep 17 00:00:00 2001
+From: Josh Law <objecting@objecting.org>
+Date: Sun, 12 Apr 2026 12:40:17 +0000
+Subject: [PATCH] lib/btree: optimize btree_merge to avoid three tree walks
+
+The btree_merge function previously used btree_last() and btree_remove() to extract elements from the victim tree, which resulted in three tree walks from the root per element.
+
+Introduce btree_remove_min() to extract and remove the smallest element in a single pass before rebalancing. This reduces the number of tree walks from three to two, reducing overhead.
+
+Signed-off-by: Josh Law <objecting@objecting.org>
+---
+ lib/btree.c | 47 +++++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 39 insertions(+), 8 deletions(-)
+
+diff --git a/lib/btree.c b/lib/btree.c
+index 9c80c0c7bba8..a15d0dcc9e04 100644
+--- a/lib/btree.c
++++ b/lib/btree.c
+@@ -631,11 +631,44 @@ void *btree_remove(struct btree_head *head, struct btree_geo *geo,
+ }
+ EXPORT_SYMBOL_GPL(btree_remove);
+ 
++static void *btree_remove_min(struct btree_head *head, struct btree_geo *geo, unsigned long *key)
++{
++	unsigned long *node;
++	int i, fill;
++	void *ret;
++
++	if (head->height == 0)
++		return NULL;
++
++	node = head->node;
++	for (i = head->height; i > 1; i--)
++		node = bval(geo, node, 0);
++
++	fill = getfill(geo, node, 0);
++	ret = bval(geo, node, 0);
++	longcpy(key, bkey(geo, node, 0), geo->keylen);
++
++	/* remove and shift */
++	for (i = 0; i < fill - 1; i++) {
++		setkey(geo, node, i, bkey(geo, node, i + 1));
++		setval(geo, node, i, bval(geo, node, i + 1));
++	}
++	clearpair(geo, node, fill - 1);
++
++	if (fill - 1 < geo->no_pairs / 2) {
++		if (1 < head->height)
++			rebalance(head, geo, key, 1, node, fill - 1);
++		else if (fill - 1 == 1)
++			btree_shrink(head, geo);
++	}
++
++	return ret;
++}
++
+ int btree_merge(struct btree_head *target, struct btree_head *victim,
+ 		struct btree_geo *geo, gfp_t gfp)
+ {
+ 	unsigned long key[MAX_KEYLEN];
+-	unsigned long dup[MAX_KEYLEN];
+ 	void *val;
+ 	int err;
+ 
+@@ -649,20 +682,18 @@ int btree_merge(struct btree_head *target, struct btree_head *victim,
+ 		return 0;
+ 	}
+ 
+-	/* TODO: This needs some optimizations.  Currently we do three tree
+-	 * walks to remove a single object from the victim.
++	/*
++	 * We use btree_remove_min() to extract elements from the victim tree.
++	 * This reduces the overhead compared to the old approach which did three
++	 * tree walks to remove a single object.
+ 	 */
+ 	for (;;) {
+-		val = btree_last(victim, geo, key);
++		val = btree_remove_min(victim, geo, key);
+ 		if (!val)
+ 			break;
+ 		err = btree_insert(target, geo, key, val, gfp);
+ 		if (err)
+ 			return err;
+-		/* We must make a copy of the key, as the original will get
+-		 * mangled inside btree_remove. */
+-		longcpy(dup, key, geo->keylen);
+-		btree_remove(victim, geo, dup);
+ 	}
+ 	return 0;
+ }
+-- 
+2.34.1
+
