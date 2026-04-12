@@ -1,0 +1,106 @@
+From f0400151dc2e427be8b866343a9cadee584418d6 Mon Sep 17 00:00:00 2001
+From: Josh Law <objecting@objecting.org>
+Date: Sun, 12 Apr 2026 12:25:09 +0000
+Subject: [PATCH] lib/alloc_tag: allocate early page tags array dynamically
+
+The fixed-size 8192 array early_pfns can overflow during early boot.
+
+Switch to dynamic allocation using krealloc_array to scale safely.
+Use the __GFP_NO_OBJ_EXT flag to prevent recursion since this runs before page_ext is initialized.
+Add a spinlock to protect concurrent array expansions during SMP boot.
+
+Signed-off-by: Josh Law <objecting@objecting.org>
+---
+ lib/alloc_tag.c | 48 +++++++++++++++++++++++++++---------------------
+ 1 file changed, 27 insertions(+), 21 deletions(-)
+
+diff --git a/lib/alloc_tag.c b/lib/alloc_tag.c
+index ed1bdcf1f8ab..b28d51373720 100644
+--- a/lib/alloc_tag.c
++++ b/lib/alloc_tag.c
+@@ -14,6 +14,7 @@
+ #include <linux/string_choices.h>
+ #include <linux/vmalloc.h>
+ #include <linux/kmemleak.h>
++#include <linux/slab.h>
+ 
+ #define ALLOCINFO_FILE_NAME		"allocinfo"
+ #define MODULE_ALLOC_TAG_VMAP_SIZE	(100000UL * sizeof(struct alloc_tag))
+@@ -771,33 +772,36 @@ static __init bool need_page_alloc_tagging(void)
+  *   - Base allocations independent of CPU count
+  *   - Per-CPU allocations (e.g., CPU hotplug callbacks during smp_init,
+  *     such as trace ring buffers, scheduler per-cpu data)
+- *
+- * For simplicity, we fix the size to 8192.
+- * If insufficient, a warning will be triggered to alert the user.
+- *
+- * TODO: Replace fixed-size array with dynamic allocation using
+- * a GFP flag similar to ___GFP_NO_OBJ_EXT to avoid recursion.
+  */
+-#define EARLY_ALLOC_PFN_MAX		8192
+-
+-static unsigned long early_pfns[EARLY_ALLOC_PFN_MAX] __initdata;
+-static atomic_t early_pfn_count __initdata = ATOMIC_INIT(0);
++static unsigned long *early_pfns __initdata;
++static int early_pfn_cap __initdata;
++static int early_pfn_count __initdata;
++static DEFINE_SPINLOCK(early_pfn_lock);
+ 
+ static void __init __alloc_tag_add_early_pfn(unsigned long pfn)
+ {
+-	int old_idx, new_idx;
++	int idx;
++	unsigned long flags;
++
++	spin_lock_irqsave(&early_pfn_lock, flags);
++	idx = early_pfn_count;
++	if (idx >= early_pfn_cap) {
++		int new_cap = early_pfn_cap ? early_pfn_cap * 2 : 256;
++		unsigned long *new_pfns;
+ 
+-	do {
+-		old_idx = atomic_read(&early_pfn_count);
+-		if (old_idx >= EARLY_ALLOC_PFN_MAX) {
+-			pr_warn_once("Early page allocations before page_ext init exceeded EARLY_ALLOC_PFN_MAX (%d)\n",
+-				      EARLY_ALLOC_PFN_MAX);
++		new_pfns = krealloc_array(early_pfns, new_cap, sizeof(unsigned long),
++					  GFP_NOWAIT | __GFP_NOWARN | __GFP_NO_OBJ_EXT);
++		if (!new_pfns) {
++			pr_warn_once("Early page allocations before page_ext init dropped\n");
++			spin_unlock_irqrestore(&early_pfn_lock, flags);
+ 			return;
+ 		}
+-		new_idx = old_idx + 1;
+-	} while (!atomic_try_cmpxchg(&early_pfn_count, &old_idx, new_idx));
+-
+-	early_pfns[old_idx] = pfn;
++		early_pfns = new_pfns;
++		early_pfn_cap = new_cap;
++	}
++	early_pfns[idx] = pfn;
++	early_pfn_count = idx + 1;
++	spin_unlock_irqrestore(&early_pfn_lock, flags);
+ }
+ 
+ typedef void alloc_tag_add_func(unsigned long pfn);
+@@ -829,7 +833,7 @@ static void __init clear_early_alloc_pfn_tag_refs(void)
+ 	/* Make sure we are not racing with __alloc_tag_add_early_pfn() */
+ 	synchronize_rcu();
+ 
+-	for (i = 0; i < atomic_read(&early_pfn_count); i++) {
++	for (i = 0; i < early_pfn_count; i++) {
+ 		unsigned long pfn = early_pfns[i];
+ 
+ 		if (pfn_valid(pfn)) {
+@@ -861,6 +865,8 @@ static void __init clear_early_alloc_pfn_tag_refs(void)
+ 		}
+ 
+ 	}
++
++	kfree(early_pfns);
+ }
+ #else /* !CONFIG_MEM_ALLOC_PROFILING_DEBUG */
+ static inline void __init clear_early_alloc_pfn_tag_refs(void) {}
+-- 
+2.34.1
+
