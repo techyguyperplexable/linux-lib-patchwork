@@ -1,4 +1,4 @@
-From 7c3e08a3ba03a97513c0cdaf3afd2cda050f91c3 Mon Sep 17 00:00:00 2001
+From 0f8e88ddc5c8b9b8f527b0ab9e892711fac7f875 Mon Sep 17 00:00:00 2001
 From: Josh Law <objecting@objecting.org>
 Date: Sun, 12 Apr 2026 12:40:17 +0000
 Subject: [PATCH] lib/btree: optimize btree_merge to avoid three tree walks
@@ -9,14 +9,14 @@ Introduce btree_remove_min() to extract and remove the smallest element in a sin
 
 Signed-off-by: Josh Law <objecting@objecting.org>
 ---
- lib/btree.c | 41 ++++++++++++++++++++++++++++++++++-------
- 1 file changed, 34 insertions(+), 7 deletions(-)
+ lib/btree.c | 42 ++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 34 insertions(+), 8 deletions(-)
 
 diff --git a/lib/btree.c b/lib/btree.c
-index 9c80c0c7bba8..b497081466c6 100644
+index 9c80c0c7bba8..298aceff0078 100644
 --- a/lib/btree.c
 +++ b/lib/btree.c
-@@ -631,6 +631,35 @@ void *btree_remove(struct btree_head *head, struct btree_geo *geo,
+@@ -631,11 +631,39 @@ void *btree_remove(struct btree_head *head, struct btree_geo *geo,
  }
  EXPORT_SYMBOL_GPL(btree_remove);
  
@@ -42,7 +42,7 @@ index 9c80c0c7bba8..b497081466c6 100644
 +		setkey(geo, node, i, bkey(geo, node, i + 1));
 +		setval(geo, node, i, bval(geo, node, i + 1));
 +	}
-+	decfill(geo, node);
++	clearpair(geo, node, fill - 1);
 +
 +	rebalance(head, geo, key, 1, node, fill - 1);
 +
@@ -52,7 +52,12 @@ index 9c80c0c7bba8..b497081466c6 100644
  int btree_merge(struct btree_head *target, struct btree_head *victim,
  		struct btree_geo *geo, gfp_t gfp)
  {
-@@ -649,20 +678,18 @@ int btree_merge(struct btree_head *target, struct btree_head *victim,
+ 	unsigned long key[MAX_KEYLEN];
+-	unsigned long dup[MAX_KEYLEN];
+ 	void *val;
+ 	int err;
+ 
+@@ -649,20 +677,18 @@ int btree_merge(struct btree_head *target, struct btree_head *victim,
  		return 0;
  	}
  
