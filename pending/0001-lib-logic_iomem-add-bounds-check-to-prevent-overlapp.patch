@@ -1,0 +1,34 @@
+From a9d47234c0f722f1a751e37d31ed4e20f32bba1e Mon Sep 17 00:00:00 2001
+From: Josh Law <objecting@objecting.org>
+Date: Sun, 12 Apr 2026 19:57:24 +0000
+Subject: [PATCH] lib/logic_iomem: add bounds check to prevent overlapping
+ mappings
+
+In ioremap(), the logic IO memory framework computes the internal offset for the requested mapping but fails to verify whether offs + size fits within the internal MAX_AREA_SIZE (16MB). If an emulated device requests a mapping that crosses this boundary, subsequent accesses to the end of the mapping will overflow the address space and be routed to the wrong logic device operations structure.
+
+Add a bounds check to ensure offs + size does not exceed MAX_AREA_SIZE, preventing out-of-bounds cross-device routing.
+
+Signed-off-by: Josh Law <objecting@objecting.org>
+---
+ lib/logic_iomem.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lib/logic_iomem.c b/lib/logic_iomem.c
+index 42a571d05670..f3012998b4d1 100644
+--- a/lib/logic_iomem.c
++++ b/lib/logic_iomem.c
+@@ -116,6 +116,11 @@ void __iomem *ioremap(phys_addr_t offset, size_t size)
+ 			break;
+ 		}
+ 
++		if (WARN_ON(offs + size > MAX_AREA_SIZE)) {
++			mapped_areas[i].ops = NULL;
++			break;
++		}
++
+ 		if (WARN_ON(!mapped_areas[i].ops)) {
+ 			mapped_areas[i].ops = NULL;
+ 			break;
+-- 
+2.34.1
+

@@ -1,0 +1,36 @@
+From bbad22d81ec632ba810f91282dcd549b532dde6d Mon Sep 17 00:00:00 2001
+From: Josh Law <objecting@objecting.org>
+Date: Sun, 12 Apr 2026 19:57:25 +0000
+Subject: [PATCH] lib/logic_pio: add missing bounds check in
+ logic_pio_trans_hwaddr
+
+logic_pio_trans_hwaddr() finds the logical PIO range for a given firmware node and verifies that the requested size fits inside the range's total size. However, it fails to verify that the requested hardware address actually falls within the starting and ending bounds of that range.
+
+If a buggy driver passes an out-of-bounds address, the function will blindly calculate and return a logical PIO token that maps to a completely different device's PIO range.
+
+Add an in_range() check to ensure the hardware address strictly belongs to the matched firmware node's range.
+
+Signed-off-by: Josh Law <objecting@objecting.org>
+---
+ lib/logic_pio.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lib/logic_pio.c b/lib/logic_pio.c
+index e29496a38d06..01b478c2b2b5 100644
+--- a/lib/logic_pio.c
++++ b/lib/logic_pio.c
+@@ -196,6 +196,11 @@ unsigned long logic_pio_trans_hwaddr(const struct fwnode_handle *fwnode,
+ 		pr_err("IO range not found or invalid\n");
+ 		return ~0UL;
+ 	}
++	if (!in_range(addr, range->hw_start, range->size)) {
++		pr_err("hw address %pa does not fit in IO range %pa\n",
++		       &addr, &range->hw_start);
++		return ~0UL;
++	}
+ 	if (range->size < size) {
+ 		pr_err("resource size %pa cannot fit in IO range size %pa\n",
+ 		       &size, &range->size);
+-- 
+2.34.1
+
