@@ -1,0 +1,62 @@
+From dd0dd029a7224fdaff5dd84f47c86402e14ecbb8 Mon Sep 17 00:00:00 2001
+From: Josh Law <objecting@objecting.org>
+Date: Sun, 12 Apr 2026 15:10:11 +0000
+Subject: [PATCH] lib/btree: optimize btree_merge
+
+The old btree_merge called btree_remove for each element, taking three tree walks per element. It was way too slow.
+
+Instead, we can iterate the victim backwards with btree_last and btree_get_prev, insert into the target, and then do a bulk cleanup on the victim using btree_grim_visitor. This makes the whole operation O(N).
+
+If an insert fails midway, we just delete the elements from the victim that already made it to the target tree.
+
+Signed-off-by: Josh Law <objecting@objecting.org>
+---
+ lib/btree.c | 28 ++++++++++++++++------------
+ 1 file changed, 16 insertions(+), 12 deletions(-)
+
+diff --git a/lib/btree.c b/lib/btree.c
+index 9c80c0c7bba8..aec5ad6ad1a3 100644
+--- a/lib/btree.c
++++ b/lib/btree.c
+@@ -649,22 +649,26 @@ int btree_merge(struct btree_head *target, struct btree_head *victim,
+ 		return 0;
+ 	}
+ 
+-	/* TODO: This needs some optimizations.  Currently we do three tree
+-	 * walks to remove a single object from the victim.
+-	 */
+-	for (;;) {
+-		val = btree_last(victim, geo, key);
+-		if (!val)
+-			break;
++	val = btree_last(victim, geo, key);
++	while (val) {
+ 		err = btree_insert(target, geo, key, val, gfp);
+ 		if (err)
+-			return err;
+-		/* We must make a copy of the key, as the original will get
+-		 * mangled inside btree_remove. */
+-		longcpy(dup, key, geo->keylen);
+-		btree_remove(victim, geo, dup);
++			goto err;
++		val = btree_get_prev(victim, geo, key);
+ 	}
++
++	/* victim is completely merged, reap its nodes */
++	btree_grim_visitor(victim, geo, 0, NULL, NULL);
+ 	return 0;
++
++err:
++	for (;;) {
++		val = btree_last(victim, geo, dup);
++		if (!val || longcmp(dup, key, geo->keylen) <= 0)
++			break;
++		btree_remove(victim, geo, dup);
++	}
++	return err;
+ }
+ EXPORT_SYMBOL_GPL(btree_merge);
+ 
+-- 
+2.34.1
+
