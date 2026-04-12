@@ -1,0 +1,74 @@
+name: Update README
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pending/**'
+      - 'upstreamed/**'
+      - 'reproducers/**'
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate README
+        run: |
+          cat <<EOF > README.md
+          # linux-lib-patchwork
+
+          Patch collection and reproduction scripts for the Linux kernel \`lib/\` directory.
+
+          ## Layout
+
+          - \`pending/\`: Patches currently under review or development.
+          - \`upstreamed/\`: Patches accepted into a parent tree.
+          - \`reproducers/\`: Scripts and logs for verifying bugs.
+
+          ## Current Patches
+
+          ### Pending
+          EOF
+
+          if [ -d "pending" ] && [ "$(ls -A pending/*.patch 2>/dev/null)" ]; then
+            for f in pending/*.patch; do
+              desc=$(grep -m 1 "Subject:" "$f" | sed 's/Subject: \[PATCH.*\] //; s/Subject: //; s/^[[:space:]]*//; s/[[:space:]]*$//')
+              echo "- \`$(basename "$f")\`: $desc" >> README.md
+            done
+          else
+            echo "_No pending patches._" >> README.md
+          fi
+
+          echo "" >> README.md
+          echo "### Upstreamed" >> README.md
+          if [ -d "upstreamed" ] && [ "$(ls -A upstreamed/*.patch 2>/dev/null)" ]; then
+            for f in upstreamed/*.patch; do
+              desc=$(grep -m 1 "Subject:" "$f" | sed 's/Subject: \[PATCH.*\] //; s/Subject: //; s/^[[:space:]]*//; s/[[:space:]]*$//')
+              echo "- \`$(basename "$f")\`: $desc" >> README.md
+            done
+          else
+            echo "_No upstreamed patches._" >> README.md
+          fi
+
+          echo "" >> README.md
+          echo "## Reproducers" >> README.md
+          if [ -d "reproducers" ] && [ "$(ls -A reproducers/ 2>/dev/null)" ]; then
+            for f in reproducers/*; do
+              [ -f "$f" ] && echo "- \`$(basename "$f")\`" >> README.md
+            done
+          else
+            echo "_No reproducers._" >> README.md
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --staged --quiet || (git commit -m "docs: update README manifest" && git push)
