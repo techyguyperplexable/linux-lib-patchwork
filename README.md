@@ -12,7 +12,7 @@ Patch collection and reproduction scripts for the Linux kernel `lib/` directory.
 
 ### Pending
 - `0000-cover-letter-fsmids.patch`: Fixes to a IDS evasion
-- `0001-lib-alloc_tag-allocate-early-page-tags-array-dynamic.patch`: lib/alloc_tag: allocate early page tags array dynamically
+- `0001-lib-alloc_tag-dynamically-allocate-early-page-tags-a.patch`: lib/alloc_tag: dynamically allocate early page tags array
 - `0001-lib-btree-optimize-btree_merge.patch`: lib/btree: optimize btree_merge
 - `0001-lib-decompress-track-total-bytes-consumed-with-fill-.patch`: lib/decompress: track total bytes consumed with fill function
 - `0001-lib-ts_fsm-Fix-text-search-evasion-on-block-boundari.patch`: lib/ts_fsm: Fix text search evasion on block boundaries
