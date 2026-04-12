@@ -13,7 +13,7 @@ Patch collection and reproduction scripts for the Linux kernel `lib/` directory.
 ### Pending
 - `0000-cover-letter-fsmids.patch`: Fixes to a IDS evasion
 - `0001-lib-ts_fsm-Fix-text-search-evasion-on-block-boundari.patch`: lib/ts_fsm: Fix text search evasion on block boundaries
-- `0002-lib-ts_fsm-Remove-overzealous-end-of-data-check.patch`: lib/ts_fsm: Remove eager end-of-data check
+- `0002-lib-ts_fsm-Remove-overeager-end-of-data-check.patch`: lib/ts_fsm: Remove overeager end-of-data check
 - `debugobjects_null_deref.patch`: debugobjects: fix NULL obj_cache dereference in
 - `idr_leak_error_path.patch`: lib/idr: fix memory leak on error path
 - `idr_leak_inline_alloc.patch`: lib/idr: fix memory leak on inline allocation
