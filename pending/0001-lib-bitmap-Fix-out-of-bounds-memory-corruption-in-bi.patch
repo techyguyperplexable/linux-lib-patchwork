@@ -1,5 +1,5 @@
 From 4af765cd6494bb426068e37861cd91cd04e80e06 Mon Sep 17 00:00:00 2001
-From: Josh Law <objecting@objecting.org>
+From: Josh Law <joshlaw48@gmail.com>
 Date: Mon, 13 Apr 2026 21:11:50 +0000
 Subject: [PATCH] lib/bitmap: Fix out-of-bounds memory corruption in bitmap
  shift operations
@@ -10,7 +10,7 @@ I honestly don't know how this hasn't blown up more systems. A shift of 128 on a
 
 This clamps the shift amount at the top of both functions. If someone asks to shift all the bits off the edge, we just zero the whole thing and return safely.
 
-Signed-off-by: Josh Law <objecting@objecting.org>
+Signed-off-by: Josh Law <joshlaw48@gmail.com>
 ---
  lib/bitmap.c | 12 ++++++++++++
  1 file changed, 12 insertions(+)
