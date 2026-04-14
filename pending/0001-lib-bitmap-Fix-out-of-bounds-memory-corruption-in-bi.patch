@@ -5,7 +5,7 @@ Subject: [PATCH] lib/bitmap: Fix OOB memory corruption in bitmap shift operation
 
 If a caller requests a shift amount greater than or equal to the size of the bitmap (nbits), __bitmap_shift_left and __bitmap_shift_right fail to clamp the 'off' variable. This causes the trailing memset() to either write way past the end of the buffer or underflow into preceding heap metadata, depending on the shift direction.
 
-I honestly don't know how this hasn't blown up more systems. A shift of 128 on a 64 bit bitmap creates a massive negative offset for memset, which means instant heap corruption... Most drivers probably never pass a shift larger than the bitmap size, or they implicitly mask it before calling these functions. But the author's original commit log from 2015 explicitly stated that shifting by >= nbits was supported and should zero the buffer. It didn't..
+I honestly don't know how this hasn't blown up more systems. A shift of 128 on a 64 bit bitmap creates a massive negative offset for memset, which means instant heap corruption... Most drivers probably never pass a shift larger than the bitmap size, or they implicitly mask it before calling these functions. But the original commit log from 2015 explicitly stated that shifting by >= nbits was supported and should zero the buffer. It didn't..
 
 This clamps the shift amount at the top of both functions. If someone asks to shift all the bits off the edge, we just zero the whole thing and return safely.
 
