@@ -5,8 +5,31 @@ Subject: [PATCH] lib/idr: fix memory leak on inline allocation
 
 If ida_alloc_range() allocates a bitmap inline, it fails to update the
 alloc pointer. If the subsequent xas_store() fails and retries, the
-bitmap is leaked.
+bitmap is leaked, causing this error:
 
+unreferenced object 0x61d89400 (size 128):
+  comm "swapper/0", pid 1, jiffies 4294937304
+  hex dump (first 32 bytes):
+    ff ff ff ff ff ff ff 7f 00 00 00 00 00 00 00 00 ................
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+  backtrace (crc 724000d1):
+    save_stack_trace+0x59/0x5e
+    stack_trace_save+0x85/0x9d
+    set_track_prepare+0x4c/0x6c
+    __alloc_object+0x1ec/0x1f7
+    __create_object+0x30/0x98
+    kmemleak_alloc+0x34/0x37
+    kmemleak_alloc_recursive.constprop.0+0x1f/0x22
+    __kmalloc_cache_noprof+0x1ce/0x1f6
+    kzalloc_noprof.constprop.0+0x77/0x7f
+    ida_alloc_range+0x208/0x514
+    ida_alloc_min.constprop.0+0x1c/0x1e
+    ida_check_leaf.constprop.0+0x47/0x134
+    ida_checks+0x233/0xebc
+    do_one_initcall+0x1cc/0x400
+    kernel_init_freeable+0x40c/0x4b3
+    kernel_init+0x2d/0x1c0
+    
 Fix this by setting alloc to the new bitmap, and add a test case.
 
 Signed-off-by: Josh Law <objecting@objecting.org>
